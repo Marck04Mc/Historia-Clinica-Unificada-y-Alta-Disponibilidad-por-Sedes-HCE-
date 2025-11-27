@@ -316,12 +316,18 @@ Este es un proyecto académico desarrollado para el curso de Interoperabilidad e
 
 ## 📄 Licencia
 
-Proyecto académico - Universidad XYZ - 2024
+Proyecto académico - 2025
 
 ## 👥 Autores
 
-- Equipo de desarrollo IDS-HCE
+Equipo de desarrollo IDS-HCE
+
+- Mario Martinez
+- Jesus Orozco
+- Andres Atencio
 
 ## 📞 Soporte
 
-Para preguntas o problemas, contactar al equipo de desarrollo.
+Para preguntas o problemas, contactar al equipo de desarrollo:
+- LinkedIn: [Mario Andres Martinez Canchila](https://www.linkedin.com/in/mario-andres-martinez-canchila-a7330b271)
+- GitHub: [Repositorio del Proyecto](https://github.com/Marck04Mc/Historia-Clinica-Unificada-y-Alta-Disponibilidad-por-Sedes-HCE-)
