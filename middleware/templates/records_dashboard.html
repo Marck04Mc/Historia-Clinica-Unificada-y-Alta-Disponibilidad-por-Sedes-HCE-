@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Historificación - Sistema HCE{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Gestión de Historias Clínicas</h2>
+</div>
+
+<div class="dashboard-grid">
+    <!-- Búsqueda avanzada -->
+    <div class="card full-width">
+        <div class="card-header">
+            <h3>Búsqueda de Historias Clínicas</h3>
+        </div>
+        <div class="card-body">
+            <div class="form-grid">
+                <input type="text" id="searchAll" placeholder="Buscar paciente..." class="search-input">
+                <select id="sedeFilter">
+                    <option value="">Todas las sedes</option>
+                </select>
+                <button onclick="searchRecords()" class="btn btn-primary">Buscar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resultados -->
+    <div class="card full-width">
+        <div class="card-header">
+            <h3>Resultados</h3>
+        </div>
+        <div class="card-body">
+            <div id="recordsList">
+                <p>Realice una búsqueda para ver resultados.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Estadísticas Generales</h3>
+        </div>
+        <div class="card-body" id="stats">
+            <p>Cargando...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para detalles -->
+<div id="detailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<style>
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 800px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close:hover,
+    .close:focus {
+        color: black;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .json-pre {
+        background-color: #f8f9fa;
+        padding: 10px;
+        border-radius: 4px;
+        overflow-x: auto;
+        max-height: 400px;
+    }
+</style>
+
+<script>
+    const modal = document.getElementById("detailsModal");
+    const span = document.getElementsByClassName("close")[0];
+    span.onclick = function () { modal.style.display = "none"; }
+    window.onclick = function (event) {
+        if (event.target == modal) { modal.style.display = "none"; }
+    }
+
+    async function loadSedes() {
+        try {
+            const response = await fetch('/api/sedes');
+            const sedes = await response.json();
+
+            let html = '<option value="">Todas las sedes</option>';
+            sedes.forEach(s => {
+                html += `<option value="${s.id_sede}">${s.nombre} - ${s.ciudad}</option>`;
+            });
+            document.getElementById('sedeFilter').innerHTML = html;
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    async function searchRecords() {
+        const search = document.getElementById('searchAll').value;
+        const sedeId = document.getElementById('sedeFilter').value;
+
+        try {
+            const token = localStorage.getItem('token');
+            let url = `/api/patients?`;
+            if (search) url += `search=${search}&`;
+            if (sedeId) url += `sede_id=${sedeId}`;
+
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const patients = await response.json();
+
+            if (patients.length === 0) {
+                document.getElementById('recordsList').innerHTML = '<p>No se encontraron resultados.</p>';
+                return;
+            }
+
+            let html = '<table class="data-table"><thead><tr>' +
+                '<th>Paciente</th><th>Identificación</th><th>Fecha Nac.</th><th>Acciones</th>' +
+                '</tr></thead><tbody>';
+
+            patients.forEach(p => {
+                html += `<tr>
+                <td>${p.nombres} ${p.apellidos}</td>
+                <td>${p.tipo_identificacion} ${p.identificacion}</td>
+                <td>${new Date(p.fecha_nacimiento).toLocaleDateString()}</td>
+                <td>
+                    <button onclick="viewHistory(${p.id_paciente})" class="btn btn-sm btn-primary">Ver Historia</button>
+                    <button onclick="downloadPDF(${p.id_paciente})" class="btn btn-sm btn-secondary">PDF</button>
+                    <button onclick="viewFHIR(${p.id_paciente})" class="btn btn-sm btn-secondary">FHIR</button>
+                </td>
+            </tr>`;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('recordsList').innerHTML = html;
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('recordsList').innerHTML = '<p class="error">Error al buscar registros</p>';
+        }
+    }
+
+    async function viewHistory(patientId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/encounters?patient_id=${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const encounters = await response.json();
+
+            let html = '<h3>Historia Clínica</h3>';
+
+            if (encounters.length === 0) {
+                html += '<p>No hay registros clínicos para este paciente.</p>';
+            } else {
+                html += '<div class="encounters-timeline">';
+                encounters.forEach(enc => {
+                    html += `<div class="encounter-item">
+                    <div class="encounter-date">${new Date(enc.fecha_hora).toLocaleString()}</div>
+                    <div class="encounter-content">
+                        <h4>${enc.tipo_encuentro.toUpperCase()}</h4>
+                        <p><strong>Sede:</strong> <span class="sede-badge">${enc.sede_nombre}</span></p>
+                        <p><strong>Médico:</strong> ${enc.doctor_nombre}</p>
+                        <p><strong>Motivo:</strong> ${enc.motivo_consulta || 'N/A'}</p>
+                        ${enc.notas_clinicas ? `<p><strong>Notas:</strong> ${enc.notas_clinicas}</p>` : ''}
+                    </div>
+                </div>`;
+                });
+                html += '</div>';
+            }
+
+            document.getElementById('modalBody').innerHTML = html;
+            modal.style.display = "block";
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al cargar la historia clínica');
+        }
+    }
+
+    async function downloadPDF(patientId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/pdf/patient/${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error('Error generando PDF');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `historia_${patientId}_${new Date().toISOString().split('T')[0]}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('Error PDF:', error);
+            alert('Error al generar PDF');
+        }
+    }
+
+    async function viewFHIR(patientId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/fhir/Patient/${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error('Error obteniendo FHIR');
+
+            const resource = await response.json();
+
+            const html = `
+                <h3>Recurso FHIR (Patient)</h3>
+                <pre class="json-pre">${JSON.stringify(resource, null, 2)}</pre>
+            `;
+
+            document.getElementById('modalBody').innerHTML = html;
+            modal.style.display = "block";
+        } catch (error) {
+            console.error('Error FHIR:', error);
+            alert('Error al obtener recurso FHIR');
+        }
+    }
+
+    async function loadStats() {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/stats/general', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error('Error cargando estadísticas');
+
+            const stats = await response.json();
+
+            const html = `
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Pacientes Activos:</span> ${stats.pacientes}
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Encuentros Clínicos:</span> ${stats.encuentros}
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Observaciones:</span> ${stats.observaciones}
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Usuarios del Sistema:</span> ${stats.usuarios}
+                    </div>
+                </div>
+            `;
+            document.getElementById('stats').innerHTML = html;
+        } catch (error) {
+            console.error('Error stats:', error);
+            document.getElementById('stats').innerHTML = '<p>No se pudieron cargar las estadísticas.</p>';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSedes();
+        loadStats();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Admisionista - Sistema HCE{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Gestión de Pacientes</h2>
+    <button onclick="showNewPatientForm()" class="btn btn-primary">
+        ➕ Nuevo Paciente
+    </button>
+</div>
+
+<div class="dashboard-grid">
+    <!-- Formulario de nuevo paciente (oculto inicialmente) -->
+    <div class="card full-width" id="newPatientCard" style="display: none;">
+        <div class="card-header">
+            <h3>Registrar Nuevo Paciente</h3>
+            <button onclick="hideNewPatientForm()" class="btn btn-secondary btn-sm">Cancelar</button>
+        </div>
+        <div class="card-body">
+            <form id="newPatientForm" class="form-grid">
+                <div class="form-group">
+                    <label>Tipo de Identificación</label>
+                    <select name="tipo_identificacion" required>
+                        <option value="CC">Cédula de Ciudadanía</option>
+                        <option value="TI">Tarjeta de Identidad</option>
+                        <option value="CE">Cédula de Extranjería</option>
+                        <option value="PA">Pasaporte</option>
+                        <option value="RC">Registro Civil</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Número de Identificación</label>
+                    <input type="text" name="identificacion" required>
+                </div>
+                <div class="form-group">
+                    <label>Nombres</label>
+                    <input type="text" name="nombres" required>
+                </div>
+                <div class="form-group">
+                    <label>Apellidos</label>
+                    <input type="text" name="apellidos" required>
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Nacimiento</label>
+                    <input type="date" name="fecha_nacimiento" required>
+                </div>
+                <div class="form-group">
+                    <label>Género</label>
+                    <select name="genero" required>
+                        <option value="M">Masculino</option>
+                        <option value="F">Femenino</option>
+                        <option value="O">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono</label>
+                    <input type="tel" name="telefono">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email">
+                </div>
+                <div class="form-group full-width">
+                    <label>Dirección</label>
+                    <input type="text" name="direccion">
+                </div>
+                <div class="form-group">
+                    <label>Ciudad</label>
+                    <input type="text" name="ciudad">
+                </div>
+                <div class="form-group full-width">
+                    <button type="submit" class="btn btn-primary">Registrar Paciente</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Formulario de edición de paciente (oculto inicialmente) -->
+    <div class="card full-width" id="editPatientCard" style="display: none;">
+        <div class="card-header">
+            <h3>Editar Paciente</h3>
+            <button onclick="hideEditPatientForm()" class="btn btn-secondary btn-sm">Cancelar</button>
+        </div>
+        <div class="card-body">
+            <form id="editPatientForm" class="form-grid">
+                <input type="hidden" name="patient_id">
+                <div class="form-group">
+                    <label>Tipo de Identificación</label>
+                    <select name="tipo_identificacion" required>
+                        <option value="CC">Cédula de Ciudadanía</option>
+                        <option value="TI">Tarjeta de Identidad</option>
+                        <option value="CE">Cédula de Extranjería</option>
+                        <option value="PA">Pasaporte</option>
+                        <option value="RC">Registro Civil</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Número de Identificación</label>
+                    <input type="text" name="identificacion" required>
+                </div>
+                <div class="form-group">
+                    <label>Nombres</label>
+                    <input type="text" name="nombres" required>
+                </div>
+                <div class="form-group">
+                    <label>Apellidos</label>
+                    <input type="text" name="apellidos" required>
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Nacimiento</label>
+                    <input type="date" name="fecha_nacimiento" required>
+                </div>
+                <div class="form-group">
+                    <label>Género</label>
+                    <select name="genero" required>
+                        <option value="M">Masculino</option>
+                        <option value="F">Femenino</option>
+                        <option value="O">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono</label>
+                    <input type="tel" name="telefono">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email">
+                </div>
+                <div class="form-group full-width">
+                    <label>Dirección</label>
+                    <input type="text" name="direccion">
+                </div>
+                <div class="form-group">
+                    <label>Ciudad</label>
+                    <input type="text" name="ciudad">
+                </div>
+                <div class="form-group full-width">
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Credenciales (oculto inicialmente) -->
+    <div class="modal" id="credentialsModal" style="display: none;">
+        <div class="modal-overlay" onclick="hideCredentialsModal()"></div>
+        <div class="modal-content credentials-modal">
+            <div class="modal-header success">
+                <h3>✅ Paciente Registrado Exitosamente</h3>
+            </div>
+            <div class="modal-body">
+                <div class="credentials-box">
+                    <h4>Credenciales de Acceso</h4>
+                    <div class="credential-item">
+                        <label>Usuario:</label>
+                        <div class="credential-value">
+                            <span id="credentialUsername"></span>
+                            <button onclick="copyToClipboard('credentialUsername')" class="btn-icon"
+                                title="Copiar">📋</button>
+                        </div>
+                    </div>
+                    <div class="credential-item">
+                        <label>Contraseña Temporal:</label>
+                        <div class="credential-value">
+                            <span id="credentialPassword"></span>
+                            <button onclick="copyToClipboard('credentialPassword')" class="btn-icon"
+                                title="Copiar">📋</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-warning">
+                    <strong>⚠️ IMPORTANTE:</strong>
+                    <ul>
+                        <li>Proporcione estas credenciales al paciente</li>
+                        <li>El paciente debe cambiar su contraseña en el primer inicio de sesión</li>
+                        <li>Estas credenciales no se mostrarán nuevamente</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="copyAllCredentials()" class="btn btn-primary">📋 Copiar Todo</button>
+                <button onclick="hideCredentialsModal()" class="btn btn-secondary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Búsqueda de pacientes -->
+    <div class="card full-width">
+        <div class="card-header">
+            <h3>Buscar Pacientes</h3>
+        </div>
+        <div class="card-body">
+            <input type="text" id="searchInput" placeholder="Buscar por nombre o identificación..." class="search-input"
+                onkeyup="searchPatients()">
+            <div id="patientsList" class="patients-list">
+                <p>Cargando...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadPatients(search = '') {
+        try {
+            const token = localStorage.getItem('token');
+            const url = search ? `/api/patients?search=${search}` : '/api/patients';
+
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const patients = await response.json();
+
+            if (patients.length === 0) {
+                document.getElementById('patientsList').innerHTML = '<p>No se encontraron pacientes.</p>';
+                return;
+            }
+
+            let html = '<table class="data-table"><thead><tr>' +
+                '<th>Identificación</th><th>Nombre</th><th>Fecha Nac.</th>' +
+                '<th>Teléfono</th><th>Acciones</th></tr></thead><tbody>';
+
+            patients.forEach(p => {
+                html += `<tr>
+                <td>${p.tipo_identificacion} ${p.identificacion}</td>
+                <td>${p.nombres} ${p.apellidos}</td>
+                <td>${new Date(p.fecha_nacimiento).toLocaleDateString()}</td>
+                <td>${p.telefono || 'N/A'}</td>
+                <td><button onclick="editPatient(${p.id_paciente})" class="btn btn-sm btn-secondary">Editar</button></td>
+            </tr>`;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('patientsList').innerHTML = html;
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    function searchPatients() {
+        const search = document.getElementById('searchInput').value;
+        loadPatients(search);
+    }
+
+    function showNewPatientForm() {
+        document.getElementById('newPatientCard').style.display = 'block';
+    }
+
+    function hideNewPatientForm() {
+        document.getElementById('newPatientCard').style.display = 'none';
+        document.getElementById('newPatientForm').reset();
+    }
+
+    function showEditPatientForm() {
+        document.getElementById('editPatientCard').style.display = 'block';
+    }
+
+    function hideEditPatientForm() {
+        document.getElementById('editPatientCard').style.display = 'none';
+        document.getElementById('editPatientForm').reset();
+    }
+
+    // Funciones para el modal de credenciales
+    function showCredentialsModal(username, password) {
+        document.getElementById('credentialUsername').textContent = username;
+        document.getElementById('credentialPassword').textContent = password;
+        document.getElementById('credentialsModal').style.display = 'flex';
+    }
+
+    function hideCredentialsModal() {
+        document.getElementById('credentialsModal').style.display = 'none';
+    }
+
+    function copyToClipboard(elementId) {
+        const text = document.getElementById(elementId).textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '✓';
+            setTimeout(() => {
+                button.textContent = originalText;
+            }, 1000);
+        }).catch(err => {
+            alert('Error al copiar: ' + err);
+        });
+    }
+
+    function copyAllCredentials() {
+        const username = document.getElementById('credentialUsername').textContent;
+        const password = document.getElementById('credentialPassword').textContent;
+        const text = `Usuario: ${username}\nContraseña: ${password}`;
+
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Credenciales copiadas al portapapeles');
+        }).catch(err => {
+            alert('Error al copiar: ' + err);
+        });
+    }
+
+    document.getElementById('newPatientForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/patients', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) throw new Error('Error al crear paciente');
+
+            // Generar contraseña temporal (misma lógica que el backend)
+            const identificacion = data.identificacion;
+            const tempPassword = (identificacion.length >= 4 ? identificacion.slice(-4) : identificacion) + '2024';
+
+            // Mostrar modal con credenciales
+            showCredentialsModal(identificacion, tempPassword);
+
+            hideNewPatientForm();
+            loadPatients();
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+
+    function editPatient(id) {
+        const token = localStorage.getItem('token');
+        fetch(`/api/patients/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('Error al obtener datos del paciente');
+                return res.json();
+            })
+            .then(patient => {
+                const form = document.getElementById('editPatientForm');
+                form.patient_id.value = patient.id_paciente;
+                form.tipo_identificacion.value = patient.tipo_identificacion;
+                form.identificacion.value = patient.identificacion;
+                form.nombres.value = patient.nombres;
+                form.apellidos.value = patient.apellidos;
+                form.fecha_nacimiento.value = patient.fecha_nacimiento ? patient.fecha_nacimiento.split('T')[0] : '';
+                form.genero.value = patient.genero;
+                form.telefono.value = patient.telefono || '';
+                form.email.value = patient.email || '';
+                form.direccion.value = patient.direccion || '';
+                form.ciudad.value = patient.ciudad || '';
+                showEditPatientForm();
+            })
+            .catch(err => {
+                alert('Error: ' + err.message);
+            });
+    }
+
+    document.getElementById('editPatientForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+        const patientId = data.patient_id;
+        delete data.patient_id;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/patients/${patientId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) throw new Error('Error al actualizar paciente');
+
+            alert('Paciente actualizado exitosamente');
+            hideEditPatientForm();
+            loadPatients();
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => loadPatients());
+</script>
+{% endblock %}

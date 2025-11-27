@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistema HCE{% endblock %}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Barra de navegación -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>🏥 HCE Interoperable</h1>
+            </div>
+            <div class="nav-sede" id="sedeInfo">
+                <span class="sede-badge" id="sedeBadge"></span>
+            </div>
+            <div class="nav-user">
+                <span id="userName"></span>
+                <button onclick="logout()" class="btn btn-secondary">Cerrar Sesión</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Contenido principal -->
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>Sistema de Historia Clínica Electrónica Interoperable - Estándar HL7 FHIR R4</p>
+        <p>&copy; 2024 - Todos los derechos reservados</p>
+    </footer>
+
+    <!-- Scripts base -->
+    <script src="/static/app.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

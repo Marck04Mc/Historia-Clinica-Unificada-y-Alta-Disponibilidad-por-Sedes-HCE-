@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hapi-fhir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hapi-fhir
+  template:
+    metadata:
+      labels:
+        app: hapi-fhir
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox
+          command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
+      containers:
+        - name: hapi-fhir
+          image: hapiproject/hapi:v7.0.2
+          ports:
+            - containerPort: 8080
+          env:
+            - name: spring.datasource.url
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: SPRING_DATASOURCE_URL
+            - name: spring.datasource.username
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: spring.datasource.password
+              valueFrom:
+                secretKeyRef:
+                  name: hce-secret
+                  key: SPRING_DATASOURCE_PASSWORD
+            - name: spring.datasource.driverClassName
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: SPRING_DATASOURCE_DRIVERCLASSNAME
+            - name: spring.jpa.properties.hibernate.dialect
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
+            - name: hapi.fhir.fhir_version
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: HAPI_FHIR_FHIR_VERSION
+            - name: hapi.fhir.subscription.resthook_enabled
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: HAPI_FHIR_SUBSCRIPTION_RESTHOOK_ENABLED
+            - name: hapi.fhir.allow_external_references
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES
+            - name: hapi.fhir.allow_multiple_delete
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: HAPI_FHIR_ALLOW_MULTIPLE_DELETE
+            - name: hapi.fhir.cors.allowed_origin
+              valueFrom:
+                configMapKeyRef:
+                  name: hce-config
+                  key: HAPI_FHIR_CORS_ALLOWED_ORIGIN
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hapi-fhir
+spec:
+  selector:
+    app: hapi-fhir
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

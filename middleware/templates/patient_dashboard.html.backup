@@ -1,0 +1,318 @@
+<div class="card-header">
+    <h3>Mis Datos Personales</h3>
+</div>
+<div class="card-body" id="patientInfo">
+    <p>Cargando...</p>
+</div>
+</div>
+
+<!-- Encuentros clínicos -->
+<div class="card full-width">
+    <div class="card-header">
+        <h3>Mis Consultas Médicas</h3>
+    </div>
+    <div class="card-body">
+        <div id="encountersList">
+            <p>Cargando...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Observaciones recientes -->
+<div class="card">
+    <div class="card-header">
+        <h3>Signos Vitales Recientes</h3>
+    </div>
+    <div class="card-body" id="vitalSigns">
+        <p>Cargando...</p>
+    </div>
+</div>
+
+<!-- Diagnósticos activos -->
+<div class="card">
+    <div class="card-header">
+        <h3>Diagnósticos Activos</h3>
+    </div>
+    <div class="card-body" id="activeDiagnostics">
+        <p>Cargando...</p>
+    </div>
+</div>
+</div>
+
+<!-- Modal para detalles -->
+<div id="detailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<style>
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 600px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close:hover,
+    .close:focus {
+        color: black;
+        text-decoration: none;
+        cursor: pointer;
+    }
+</style>
+
+<script>
+    let patientId = null;
+
+    // Modal logic
+    const modal = document.getElementById("detailsModal");
+    const span = document.getElementsByClassName("close")[0];
+    span.onclick = function () { modal.style.display = "none"; }
+    window.onclick = function (event) {
+        if (event.target == modal) { modal.style.display = "none"; }
+    }
+
+    async function loadPatientData() {
+        try {
+            const token = localStorage.getItem('token');
+
+            // Obtener datos del paciente
+            const response = await fetch('/api/patients', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const patients = await response.json();
+            if (patients.length > 0) {
+                const patient = patients[0];
+                patientId = patient.id_paciente;
+
+                document.getElementById('patientInfo').innerHTML = `
+                <div class="info-grid">
+                    <div><strong>Nombre:</strong> ${patient.nombres} ${patient.apellidos}</div>
+                    <div><strong>Identificación:</strong> ${patient.tipo_identificacion} ${patient.identificacion}</div>
+                    <div><strong>Fecha de Nacimiento:</strong> ${new Date(patient.fecha_nacimiento).toLocaleDateString()}</div>
+                    <div><strong>Género:</strong> ${patient.genero}</div>
+                    <div><strong>Teléfono:</strong> ${patient.telefono || 'N/A'}</div>
+                    <div><strong>Email:</strong> ${patient.email || 'N/A'}</div>
+                </div>
+            `;
+
+                // Cargar todos los datos relacionados
+                await Promise.all([
+                    loadEncounters(patientId),
+                    loadObservations(patientId),
+                    loadDiagnostics(patientId)
+                ]);
+            }
+        } catch (error) {
+            console.error('Error cargando datos:', error);
+            document.getElementById('patientInfo').innerHTML = '<p class="error">Error cargando información personal</p>';
+        }
+    }
+
+    async function loadEncounters(patientId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/encounters?patient_id=${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const encounters = await response.json();
+
+            if (encounters.length === 0) {
+                document.getElementById('encountersList').innerHTML = '<p>No hay consultas registradas.</p>';
+                return;
+            }
+
+            let html = '<div class="encounters-timeline">';
+            for (const enc of encounters) {
+                html += `
+                <div class="encounter-item">
+                    <div class="encounter-date">${new Date(enc.fecha_hora).toLocaleDateString()}</div>
+                    <div class="encounter-content">
+                        <h4>${enc.tipo_encuentro.toUpperCase()}</h4>
+                        <p><strong>Sede:</strong> <span class="sede-badge">${enc.sede_nombre}</span></p>
+                        <p><strong>Médico:</strong> ${enc.doctor_nombre}</p>
+                        <p><strong>Motivo:</strong> ${enc.motivo_consulta || 'N/A'}</p>
+                        <button onclick="viewEncounterDetails(${enc.id_encuentro})" class="btn btn-sm btn-secondary">
+                            Ver Detalles
+                        </button>
+                    </div>
+                </div>
+            `;
+            }
+            html += '</div>';
+            document.getElementById('encountersList').innerHTML = html;
+        } catch (error) {
+            console.error('Error cargando encuentros:', error);
+            document.getElementById('encountersList').innerHTML = '<p class="error">Error cargando consultas</p>';
+        }
+    }
+
+    async function loadObservations(patientId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/encounters?patient_id=${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const encounters = await response.json();
+
+            let allObs = [];
+            for (let enc of encounters.slice(0, 3)) {
+                const detResponse = await fetch(`/api/encounters/${enc.id_encuentro}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const details = await detResponse.json();
+                if (details.observaciones) {
+                    allObs = allObs.concat(details.observaciones);
+                }
+            }
+
+            if (allObs.length === 0) {
+                document.getElementById('vitalSigns').innerHTML = '<p>No hay signos vitales recientes.</p>';
+                return;
+            }
+
+            let html = '<ul class="obs-list">';
+            for (const obs of allObs.slice(0, 5)) {
+                html += `
+                    <li>
+                        <strong>${obs.descripcion}:</strong> 
+                        ${obs.valor_numerico || obs.valor_texto} ${obs.unidad || ''}
+                        <small class="text-muted">(${new Date(obs.fecha_hora).toLocaleDateString()})</small>
+                    </li>`;
+            }
+            html += '</ul>';
+            document.getElementById('vitalSigns').innerHTML = html;
+
+        } catch (error) {
+            console.error('Error cargando observaciones:', error);
+            document.getElementById('vitalSigns').innerHTML = '<p class="error">Error cargando signos vitales</p>';
+        }
+    }
+
+    async function loadDiagnostics(patientId) {
+        document.getElementById('activeDiagnostics').innerHTML = '<p>No hay diagnósticos activos registrados.</p>';
+    }
+
+    async function viewEncounterDetails(encounterId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/encounters/${encounterId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const encounter = await response.json();
+
+            let html = `
+                <h3>Detalles del Encuentro</h3>
+                <div class="detail-group">
+                    <p><strong>Fecha:</strong> ${new Date(encounter.fecha_hora).toLocaleString()}</p>
+                    <p><strong>Tipo:</strong> ${encounter.tipo_encuentro}</p>
+                    <p><strong>Sede:</strong> ${encounter.sede_nombre}</p>
+                    <p><strong>Médico:</strong> ${encounter.doctor_nombre}</p>
+                    <p><strong>Motivo:</strong> ${encounter.motivo_consulta}</p>
+                    <p><strong>Notas:</strong> ${encounter.notas_clinicas || 'N/A'}</p>
+                </div>
+            `;
+
+            if (encounter.observaciones && encounter.observaciones.length > 0) {
+                html += '<h4>Observaciones</h4><ul>';
+                encounter.observaciones.forEach(obs => {
+                    html += `<li><strong>${obs.descripcion}:</strong> ${obs.valor_numerico || obs.valor_texto} ${obs.unidad || ''}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            if (encounter.diagnosticos && encounter.diagnosticos.length > 0) {
+                html += '<h4>Diagnósticos</h4><ul>';
+                encounter.diagnosticos.forEach(diag => {
+                    html += `<li>${diag.descripcion} <span class="badge">${diag.codigo_icd10}</span></li>`;
+                });
+                html += '</ul>';
+            }
+
+            if (encounter.medicamentos && encounter.medicamentos.length > 0) {
+                html += '<h4>Medicamentos</h4><ul>';
+                encounter.medicamentos.forEach(med => {
+                    html += `<li>${med.nombre} - ${med.dosis} (${med.frecuencia})</li>`;
+                });
+                html += '</ul>';
+            }
+
+            document.getElementById('modalBody').innerHTML = html;
+            modal.style.display = "block";
+
+        } catch (error) {
+            console.error('Error cargando detalles:', error);
+            alert('Error al cargar los detalles de la consulta');
+        }
+    }
+
+    async function downloadPDF() {
+        if (!patientId) {
+            alert('No se pudo obtener el ID del paciente');
+            return;
+        }
+
+        const btn = document.querySelector('button[onclick="downloadPDF()"]');
+        const originalText = btn.innerText;
+        btn.innerText = 'Generando PDF...';
+        btn.disabled = true;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/pdf/patient/${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || 'Error generando PDF');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `historia_clinica_${new Date().toISOString().split('T')[0]}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('Error descargando PDF:', error);
+            alert('Error al generar el PDF: ' + error.message);
+        } finally {
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadPatientData);
+</script>
+{% endblock %}

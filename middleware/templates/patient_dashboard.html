@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Paciente - Sistema HCE{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Mi Historia Clínica</h2>
+    <div style="display: flex; gap: 1rem;">
+        <button onclick="window.location.href='/change-password'" class="btn btn-secondary">
+            🔒 Cambiar Contraseña
+        </button>
+        <button onclick="downloadPDF()" class="btn btn-primary">
+            📄 Descargar Historia Clínica (PDF)
+        </button>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <!-- Información del paciente -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Mis Datos Personales</h3>
+        </div>
+        <div class="card-body" id="patientInfo">
+            <p>Cargando...</p>
+        </div>
+    </div>
+
+    <!-- Encuentros clínicos -->
+    <div class="card full-width">
+        <div class="card-header">
+            <h3>Mis Consultas Médicas</h3>
+        </div>
+        <div class="card-body">
+            <div id="encountersList">
+                <p>Cargando...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Observaciones recientes -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Signos Vitales Recientes</h3>
+        </div>
+        <div class="card-body" id="vitalSigns">
+            <p>Cargando...</p>
+        </div>
+    </div>
+
+    <!-- Diagnósticos activos -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Diagnósticos Activos</h3>
+        </div>
+        <div class="card-body" id="activeDiagnostics">
+            <p>Cargando...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let patientId = null;
+
+    async function loadPatientData() {
+        try {
+            const token = localStorage.getItem('token');
+
+            // Obtener datos del paciente
+            const response = await fetch('/api/patients', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const patients = await response.json();
+            if (patients.length > 0) {
+                const patient = patients[0];
+                patientId = patient.id_paciente;
+
+                document.getElementById('patientInfo').innerHTML = `
+                <div class="info-grid">
+                    <div><strong>Nombre:</strong> ${patient.nombres} ${patient.apellidos}</div>
+                    <div><strong>Identificación:</strong> ${patient.tipo_identificacion} ${patient.identificacion}</div>
+                    <div><strong>Fecha de Nacimiento:</strong> ${new Date(patient.fecha_nacimiento).toLocaleDateString()}</div>
+                    <div><strong>Género:</strong> ${patient.genero}</div>
+                    <div><strong>Teléfono:</strong> ${patient.telefono || 'N/A'}</div>
+                    <div><strong>Email:</strong> ${patient.email || 'N/A'}</div>
+                </div>
+            `;
+
+                // Cargar todos los datos relacionados
+                await Promise.all([
+                    loadEncounters(patientId),
+                    loadObservations(patientId),
+                    loadDiagnostics(patientId)
+                ]);
+            }
+        } catch (error) {
+            console.error('Error cargando datos:', error);
+            document.getElementById('patientInfo').innerHTML = '<p class="error">Error cargando información personal</p>';
+        }
+    }
+
+    async function loadEncounters(patientId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/encounters?patient_id=${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const encounters = await response.json();
+
+            if (encounters.length === 0) {
+                document.getElementById('encountersList').innerHTML = '<p>No hay consultas registradas.</p>';
+                return;
+            }
+
+            let html = '<div class="encounters-timeline">';
+            for (const enc of encounters) {
+                html += `
+                <div class="encounter-item">
+                    <div class="encounter-date">${new Date(enc.fecha_hora).toLocaleDateString()}</div>
+                    <div class="encounter-content">
+                        <h4>${enc.tipo_encuentro.toUpperCase()}</h4>
+                        <p><strong>Sede:</strong> <span class="sede-badge">${enc.sede_nombre}</span></p>
+                        <p><strong>Médico:</strong> ${enc.doctor_nombre}</p>
+                        <p><strong>Motivo:</strong> ${enc.motivo_consulta || 'N/A'}</p>
+                    </div>
+                </div>
+            `;
+            }
+            html += '</div>';
+            document.getElementById('encountersList').innerHTML = html;
+        } catch (error) {
+            console.error('Error cargando encuentros:', error);
+            document.getElementById('encountersList').innerHTML = '<p class="error">Error cargando consultas</p>';
+        }
+    }
+
+    async function loadObservations(patientId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/encounters?patient_id=${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const encounters = await response.json();
+
+            let allObs = [];
+            for (let enc of encounters.slice(0, 3)) {
+                const detResponse = await fetch(`/api/encounters/${enc.id_encuentro}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const details = await detResponse.json();
+                if (details.observaciones) {
+                    allObs = allObs.concat(details.observaciones);
+                }
+            }
+
+            if (allObs.length === 0) {
+                document.getElementById('vitalSigns').innerHTML = '<p>No hay signos vitales recientes.</p>';
+                return;
+            }
+
+            let html = '<div class="info-grid">';
+            allObs.slice(0, 6).forEach(obs => {
+                html += `<div><strong>${obs.descripcion}:</strong> ${obs.valor_numerico} ${obs.unidad || ''}</div>`;
+            });
+            html += '</div>';
+            document.getElementById('vitalSigns').innerHTML = html;
+        } catch (error) {
+            console.error('Error cargando observaciones:', error);
+            document.getElementById('vitalSigns').innerHTML = '<p class="error">Error cargando signos vitales</p>';
+        }
+    }
+
+    async function loadDiagnostics(patientId) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/encounters?patient_id=${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const encounters = await response.json();
+
+            let allDiag = [];
+            for (let enc of encounters.slice(0, 5)) {
+                const detResponse = await fetch(`/api/encounters/${enc.id_encuentro}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const details = await detResponse.json();
+                if (details.diagnosticos) {
+                    allDiag = allDiag.concat(details.diagnosticos);
+                }
+            }
+
+            if (allDiag.length === 0) {
+                document.getElementById('activeDiagnostics').innerHTML = '<p>No hay diagnósticos registrados.</p>';
+                return;
+            }
+
+            let html = '<ul>';
+            allDiag.slice(0, 5).forEach(diag => {
+                html += `<li><strong>${diag.codigo_icd10}:</strong> ${diag.descripcion}</li>`;
+            });
+            html += '</ul>';
+            document.getElementById('activeDiagnostics').innerHTML = html;
+        } catch (error) {
+            console.error('Error cargando diagnósticos:', error);
+            document.getElementById('activeDiagnostics').innerHTML = '<p class="error">Error cargando diagnósticos</p>';
+        }
+    }
+
+    async function downloadPDF() {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/pdf/patient/${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error('Error al generar PDF');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `historia_clinica_${patientId}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => loadPatientData());
+</script>
+{% endblock %}

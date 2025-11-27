@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # =====================================================
+  # PostgreSQL Estándar (simplificado sin Citus)
+  # =====================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: hce-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: hce_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - hce-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =====================================================
+  # HAPI FHIR Server
+  # =====================================================
+  hapi-fhir:
+    image: hapiproject/hapi:v7.0.2
+    container_name: hce-hapi-fhir
+    environment:
+      spring.datasource.url: jdbc:postgresql://postgres:5432/hce_db
+      spring.datasource.username: postgres
+      spring.datasource.password: postgres123
+      spring.datasource.driverClassName: org.postgresql.Driver
+      spring.jpa.properties.hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect
+      hapi.fhir.fhir_version: R4
+      hapi.fhir.subscription.resthook_enabled: true
+      hapi.fhir.allow_external_references: true
+      hapi.fhir.allow_multiple_delete: true
+      hapi.fhir.cors.allowed_origin: "*"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hce-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/fhir/metadata || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # =====================================================
+  # FastAPI Middleware
+  # =====================================================
+  middleware:
+    build:
+      context: ./middleware
+      dockerfile: Dockerfile
+    image: middleware-citus:1.0
+    container_name: hce-middleware
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: hce_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres123
+      FHIR_SERVER_URL: http://hapi-fhir:8080/fhir
+      JWT_SECRET_KEY: "tu-clave-secreta-super-segura-cambiar-en-produccion-2024"
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRATION_MINUTES: 30
+      CORS_ORIGINS: "*"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hce-network
+    volumes:
+      - ./middleware:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+networks:
+  hce-network:
+    driver: bridge
+
+volumes:
+  postgres-data:

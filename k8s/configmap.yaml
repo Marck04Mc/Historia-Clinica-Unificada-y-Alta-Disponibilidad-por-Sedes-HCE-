@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hce-config
+data:
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "hce_db"
+  DB_USER: "postgres"
+  FHIR_SERVER_URL: "http://hapi-fhir:8080/fhir"
+  JWT_ALGORITHM: "HS256"
+  JWT_EXPIRATION_MINUTES: "30"
+  CORS_ORIGINS: "*"
+  # HAPI FHIR Specific
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/hce_db"
+  SPRING_DATASOURCE_USERNAME: "postgres"
+  SPRING_DATASOURCE_DRIVERCLASSNAME: "org.postgresql.Driver"
+  SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect"
+  HAPI_FHIR_FHIR_VERSION: "R4"
+  HAPI_FHIR_SUBSCRIPTION_RESTHOOK_ENABLED: "true"
+  HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES: "true"
+  HAPI_FHIR_ALLOW_MULTIPLE_DELETE: "true"
+  HAPI_FHIR_CORS_ALLOWED_ORIGIN: "*"

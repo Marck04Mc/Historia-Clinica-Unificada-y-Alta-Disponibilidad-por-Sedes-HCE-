@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Médico - Sistema HCE{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Atención Médica</h2>
+</div>
+
+<div class="dashboard-grid">
+    <!-- Selección de paciente -->
+    <div class="card full-width">
+        <div class="card-header">
+            <h3>Seleccionar Paciente</h3>
+        </div>
+        <div class="card-body">
+            <input type="text" id="searchPatient" placeholder="Buscar paciente (Nombre o Identificación)..."
+                class="search-input" onkeyup="searchPatients()">
+            <div id="patientSelect"></div>
+        </div>
+    </div>
+
+    <!-- Información del paciente seleccionado -->
+    <div class="card full-width" id="patientInfoCard" style="display: none;">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>Paciente Seleccionado</h3>
+            <button onclick="downloadHistoryPDF()" class="btn btn-secondary">📄 Descargar Historia Clínica</button>
+        </div>
+        <div class="card-body" id="selectedPatientInfo"></div>
+
+        <!-- Tabs de navegación -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('new-encounter')">Nuevo Encuentro</button>
+            <button class="tab-btn" onclick="switchTab('history')">Historia Clínica</button>
+        </div>
+    </div>
+
+    <!-- Tab: Nuevo Encuentro -->
+    <div id="tab-new-encounter" class="tab-content active">
+        <!-- Nuevo encuentro clínico -->
+        <div class="card" id="newEncounterCard">
+            <div class="card-header">
+                <h3>Nuevo Encuentro Clínico</h3>
+            </div>
+            <div class="card-body">
+                <form id="encounterForm">
+                    <input type="hidden" id="selectedPatientId">
+                    <div class="form-group">
+                        <label>Tipo de Encuentro</label>
+                        <select name="tipo_encuentro" required>
+                            <option value="consulta">Consulta</option>
+                            <option value="urgencia">Urgencia</option>
+                            <option value="control">Control</option>
+                            <option value="cirugia">Cirugía</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Motivo de Consulta</label>
+                        <textarea name="motivo_consulta" rows="3" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Notas Clínicas</label>
+                        <textarea name="notas_clinicas" rows="5"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Crear Encuentro</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Agregar observaciones -->
+        <div class="card full-width" id="observationsCard" style="display: none;">
+            <div class="card-header">
+                <h3>Registrar Observaciones Clínicas</h3>
+            </div>
+            <div class="card-body">
+                <input type="hidden" id="currentEncounterId">
+                <form id="observationForm" class="form-grid">
+                    <div class="form-group">
+                        <label>Código LOINC</label>
+                        <select name="codigo_loinc">
+                            <option value="8480-6">8480-6 - Presión Arterial Sistólica</option>
+                            <option value="8462-4">8462-4 - Presión Arterial Diastólica</option>
+                            <option value="8867-4">8867-4 - Frecuencia Cardíaca</option>
+                            <option value="8310-5">8310-5 - Temperatura Corporal</option>
+                            <option value="29463-7">29463-7 - Peso Corporal</option>
+                            <option value="8302-2">8302-2 - Estatura</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Descripción</label>
+                        <input type="text" name="descripcion" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Valor Numérico</label>
+                        <input type="number" step="0.01" name="valor_numerico">
+                    </div>
+                    <div class="form-group">
+                        <label>Unidad</label>
+                        <input type="text" name="unidad" placeholder="ej: mmHg, °C, kg">
+                    </div>
+                    <div class="form-group full-width">
+                        <button type="submit" class="btn btn-primary">Agregar Observación</button>
+                    </div>
+                </form>
+                <div id="observationsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab: Historia Clínica -->
+    <div id="tab-history" class="tab-content" style="display: none;">
+        <div class="card full-width">
+            <div class="card-header">
+                <h3>Historial de Encuentros</h3>
+            </div>
+            <div class="card-body">
+                <div id="historyList">Cargando historial...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedPatient = null;
+    let currentEncounter = null;
+
+    function switchTab(tabName) {
+        // Ocultar todos los tabs
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.style.display = 'none';
+            tab.classList.remove('active');
+        });
+
+        // Desactivar botones
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        // Mostrar tab seleccionado
+        document.getElementById(`tab-${tabName}`).style.display = 'block';
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+
+        // Activar botón correspondiente
+        const btnIndex = tabName === 'new-encounter' ? 0 : 1;
+        document.querySelectorAll('.tab-btn')[btnIndex].classList.add('active');
+
+        if (tabName === 'history' && selectedPatient) {
+            loadPatientHistory(selectedPatient);
+        }
+    }
+
+    async function searchPatients() {
+        const search = document.getElementById('searchPatient').value;
+        if (search.length < 2) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/patients?search=${search}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const patients = await response.json();
+            let html = '<div class="patient-select-list">';
+            patients.forEach(p => {
+                html += `<div class="patient-select-item" onclick="selectPatient(${p.id_paciente}, '${p.nombres} ${p.apellidos}', '${p.identificacion}')">
+                <strong>${p.nombres} ${p.apellidos}</strong><br>
+                <small>ID: ${p.identificacion}</small>
+            </div>`;
+            });
+            html += '</div>';
+            document.getElementById('patientSelect').innerHTML = html;
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    function selectPatient(id, name, identification) {
+        selectedPatient = id;
+        document.getElementById('selectedPatientId').value = id;
+        document.getElementById('selectedPatientInfo').innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div><strong>Paciente:</strong> ${name}</div>
+            <div><strong>Identificación:</strong> ${identification}</div>
+        </div>
+    `;
+        document.getElementById('patientInfoCard').style.display = 'block';
+        document.getElementById('patientSelect').innerHTML = '';
+        document.getElementById('searchPatient').value = '';
+
+        // Resetear vista de nuevo encuentro
+        document.getElementById('observationsCard').style.display = 'none';
+        document.getElementById('encounterForm').reset();
+
+        // Por defecto ir a nuevo encuentro
+        switchTab('new-encounter');
+    }
+
+    async function loadPatientHistory(patientId) {
+        const historyList = document.getElementById('historyList');
+        historyList.innerHTML = '<div class="loading-spinner">Cargando...</div>';
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/encounters?patient_id=${patientId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error('Error al cargar historial');
+
+            const encounters = await response.json();
+
+            if (encounters.length === 0) {
+                historyList.innerHTML = '<div class="alert alert-info">No hay historial clínico registrado para este paciente.</div>';
+                return;
+            }
+
+            let html = '<div class="timeline">';
+            encounters.forEach(enc => {
+                const date = new Date(enc.fecha_hora).toLocaleString();
+                html += `
+                    <div class="timeline-item">
+                        <div class="timeline-header">
+                            <strong>${date}</strong> - ${enc.tipo_encuentro.toUpperCase()}
+                            <span class="badge badge-${enc.estado}">${enc.estado}</span>
+                        </div>
+                        <div class="timeline-body">
+                            <p><strong>Doctor:</strong> ${enc.doctor_nombre} (${enc.sede_nombre})</p>
+                            <p><strong>Motivo:</strong> ${enc.motivo_consulta}</p>
+                            ${enc.notas_clinicas ? `<p><strong>Notas:</strong> ${enc.notas_clinicas}</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            historyList.innerHTML = html;
+
+        } catch (error) {
+            historyList.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        }
+    }
+
+    async function downloadHistoryPDF() {
+        if (!selectedPatient) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/pdf/patient/${selectedPatient}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error('Error al generar PDF');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `historia_clinica_${selectedPatient}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            alert('Error al descargar PDF: ' + error.message);
+        }
+    }
+
+    document.getElementById('encounterForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const data = {
+            id_paciente: parseInt(document.getElementById('selectedPatientId').value),
+            tipo_encuentro: formData.get('tipo_encuentro'),
+            motivo_consulta: formData.get('motivo_consulta'),
+            notas_clinicas: formData.get('notas_clinicas')
+        };
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/encounters', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) throw new Error('Error al crear encuentro');
+
+            const encounter = await response.json();
+            currentEncounter = encounter.id_encuentro;
+            document.getElementById('currentEncounterId').value = currentEncounter;
+
+            alert('Encuentro creado exitosamente');
+            document.getElementById('observationsCard').style.display = 'block';
+            // No resetear formulario para mantener contexto
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+
+    document.getElementById('observationForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const data = {
+            id_encuentro: currentEncounter,
+            id_paciente: selectedPatient,
+            codigo_loinc: formData.get('codigo_loinc'),
+            descripcion: formData.get('descripcion'),
+            valor_numerico: formData.get('valor_numerico') ? parseFloat(formData.get('valor_numerico')) : null,
+            unidad: formData.get('unidad')
+        };
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/observations', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) throw new Error('Error al crear observación');
+
+            alert('Observación registrada exitosamente');
+            e.target.reset();
+
+            // Actualizar lista de observaciones (opcional, por ahora solo alerta)
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+</script>
+
+<style>
+    .tabs {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 0.5rem;
+    }
+
+    .tab-btn {
+        background: none;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-size: 1rem;
+        cursor: pointer;
+        border-radius: 4px 4px 0 0;
+        color: #666;
+    }
+
+    .tab-btn.active {
+        background-color: #e3f2fd;
+        color: #1976d2;
+        font-weight: bold;
+        border-bottom: 2px solid #1976d2;
+    }
+
+    .timeline {
+        border-left: 2px solid #ddd;
+        padding-left: 1rem;
+        margin-left: 0.5rem;
+    }
+
+    .timeline-item {
+        margin-bottom: 1.5rem;
+        position: relative;
+    }
+
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -1.4rem;
+        top: 0.2rem;
+        width: 0.8rem;
+        height: 0.8rem;
+        background-color: #1976d2;
+        border-radius: 50%;
+    }
+
+    .timeline-header {
+        margin-bottom: 0.5rem;
+        color: #444;
+    }
+
+    .timeline-body {
+        background-color: #f9f9f9;
+        padding: 1rem;
+        border-radius: 4px;
+        border: 1px solid #eee;
+    }
+
+    .patient-select-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+    }
+
+    .patient-select-item:hover {
+        background-color: #f5f5f5;
+    }
+</style>
+{% endblock %}

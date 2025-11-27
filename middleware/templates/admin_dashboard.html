@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Administrador - Sistema HCE{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Administración de Usuarios</h2>
+</div>
+
+<div class="dashboard-grid">
+    <!-- Formulario de registro de usuarios -->
+    <div class="card full-width">
+        <div class="card-header">
+            <h3>Registrar Nuevo Usuario</h3>
+        </div>
+        <div class="card-body">
+            <form id="newUserForm" class="form-grid">
+                <div class="form-group">
+                    <label>Rol *</label>
+                    <select name="rol" required>
+                        <option value="">Seleccione un rol</option>
+                        <option value="admisionista">Admisionista</option>
+                        <option value="medico">Médico</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Sede *</label>
+                    <select name="id_sede" id="sedeSelect" required>
+                        <option value="">Cargando sedes...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Identificación *</label>
+                    <input type="text" name="identificacion" required placeholder="Documento de identidad">
+                </div>
+                <div class="form-group">
+                    <label>Nombres *</label>
+                    <input type="text" name="nombres" required>
+                </div>
+                <div class="form-group">
+                    <label>Apellidos *</label>
+                    <input type="text" name="apellidos" required>
+                </div>
+                <div class="form-group">
+                    <label>Email *</label>
+                    <input type="email" name="email" required>
+                </div>
+                <div class="form-group full-width">
+                    <button type="submit" class="btn btn-primary">Crear Usuario</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Gestión de usuarios -->
+    <div class="card full-width">
+        <div class="card-header">
+            <h3>Usuarios Registrados</h3>
+        </div>
+        <div class="card-body">
+            <!-- Filtros -->
+            <div class="filters-row" style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                <select id="filterRol" onchange="loadUsers()">
+                    <option value="">Todos los roles</option>
+                    <option value="admisionista">Admisionista</option>
+                    <option value="medico">Médico</option>
+                    <option value="admin">Admin</option>
+                </select>
+                <select id="filterSede" onchange="loadUsers()">
+                    <option value="">Todas las sedes</option>
+                </select>
+                <select id="filterActivo" onchange="loadUsers()">
+                    <option value="">Todos los estados</option>
+                    <option value="true">Activos</option>
+                    <option value="false">Inactivos</option>
+                </select>
+                <input type="text" id="searchUser" placeholder="Buscar por nombre..." onkeyup="searchUsers()"
+                    style="flex: 1; min-width: 200px;">
+            </div>
+
+            <!-- Tabla de usuarios -->
+            <div style="overflow-x: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Identificación</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>Sede</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <tr>
+                            <td colspan="8" style="text-align: center;">Cargando...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de credenciales -->
+<div id="credentialsModal" class="modal" style="display: none;">
+    <div class="modal-overlay" onclick="hideCredentialsModal()"></div>
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3>✅ Usuario Creado Exitosamente</h3>
+            <button class="modal-close" onclick="hideCredentialsModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="alert alert-warning">
+                <strong>⚠️ IMPORTANTE:</strong> Estas credenciales se mostrarán solo una vez.
+                Asegúrese de copiarlas y compartirlas de forma segura con el usuario.
+            </div>
+
+            <div class="credentials-box">
+                <div class="credential-item">
+                    <label>Usuario:</label>
+                    <div class="credential-value">
+                        <code id="credUsername"></code>
+                        <button onclick="copyToClipboard('credUsername')" class="btn-copy">📋 Copiar</button>
+                    </div>
+                </div>
+                <div class="credential-item">
+                    <label>Contraseña Temporal:</label>
+                    <div class="credential-value">
+                        <code id="credPassword"></code>
+                        <button onclick="copyToClipboard('credPassword')" class="btn-copy">📋 Copiar</button>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="copyAllCredentials()" class="btn btn-secondary" style="width: 100%; margin-top: 1rem;">
+                📋 Copiar Todo
+            </button>
+
+            <div class="alert alert-info" style="margin-top: 1rem;">
+                El usuario debe cambiar su contraseña en el primer inicio de sesión.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentCredentials = {};
+
+    async function loadSedes() {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/sedes', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const sedes = await response.json();
+
+            // Llenar select de formulario
+            const sedeSelect = document.getElementById('sedeSelect');
+            sedeSelect.innerHTML = '<option value="">Seleccione una sede</option>';
+            sedes.forEach(sede => {
+                sedeSelect.innerHTML += `<option value="${sede.id_sede}">${sede.nombre} - ${sede.ciudad}</option>`;
+            });
+
+            // Llenar filtro de sedes
+            const filterSede = document.getElementById('filterSede');
+            filterSede.innerHTML = '<option value="">Todas las sedes</option>';
+            sedes.forEach(sede => {
+                filterSede.innerHTML += `<option value="${sede.id_sede}">${sede.nombre}</option>`;
+            });
+        } catch (error) {
+            console.error('Error cargando sedes:', error);
+        }
+    }
+
+    async function loadUsers() {
+        try {
+            const token = localStorage.getItem('token');
+            const filterRol = document.getElementById('filterRol').value;
+            const filterSede = document.getElementById('filterSede').value;
+            const filterActivo = document.getElementById('filterActivo').value;
+
+            let url = '/api/users?';
+            if (filterRol) url += `rol=${filterRol}&`;
+            if (filterSede) url += `id_sede=${filterSede}&`;
+            if (filterActivo) url += `activo=${filterActivo}&`;
+
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al cargar usuarios');
+            }
+
+            const users = await response.json();
+            const tbody = document.getElementById('usersTableBody');
+
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay usuarios registrados</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map(user => `
+            <tr>
+                <td>${user.id_usuario}</td>
+                <td>${user.nombres} ${user.apellidos}</td>
+                <td>${user.username}</td>
+                <td>${user.email}</td>
+                <td><span class="badge badge-${user.rol}">${user.rol}</span></td>
+                <td>${user.sede_nombre || 'N/A'}</td>
+                <td>
+                    <span class="badge ${user.activo ? 'badge-success' : 'badge-danger'}">
+                        ${user.activo ? 'Activo' : 'Inactivo'}
+                    </span>
+                </td>
+                <td>
+                    ${user.activo ?
+                    `<button onclick="toggleUserStatus(${user.id_usuario}, false)" class="btn btn-sm btn-danger">Desactivar</button>` :
+                    `<button onclick="toggleUserStatus(${user.id_usuario}, true)" class="btn btn-sm btn-success">Activar</button>`
+                }
+                </td>
+            </tr>
+        `).join('');
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al cargar usuarios: ' + error.message);
+        }
+    }
+
+    let searchTimeout;
+    function searchUsers() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            const search = document.getElementById('searchUser').value;
+            if (search.length < 2 && search.length > 0) return;
+
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch(`/api/users?search=${search}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const users = await response.json();
+
+                const tbody = document.getElementById('usersTableBody');
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No se encontraron usuarios</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td>${user.id_usuario}</td>
+                    <td>${user.nombres} ${user.apellidos}</td>
+                    <td>${user.username}</td>
+                    <td>${user.email}</td>
+                    <td><span class="badge badge-${user.rol}">${user.rol}</span></td>
+                    <td>${user.sede_nombre || 'N/A'}</td>
+                    <td>
+                        <span class="badge ${user.activo ? 'badge-success' : 'badge-danger'}">
+                            ${user.activo ? 'Activo' : 'Inactivo'}
+                        </span>
+                    </td>
+                    <td>
+                        ${user.activo ?
+                        `<button onclick="toggleUserStatus(${user.id_usuario}, false)" class="btn btn-sm btn-danger">Desactivar</button>` :
+                        `<button onclick="toggleUserStatus(${user.id_usuario}, true)" class="btn btn-sm btn-success">Activar</button>`
+                    }
+                    </td>
+                </tr>
+            `).join('');
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }, 300);
+    }
+
+    async function toggleUserStatus(userId, activate) {
+        if (!confirm(`¿Está seguro de ${activate ? 'activar' : 'desactivar'} este usuario?`)) {
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/users/${userId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ activo: activate })
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al actualizar usuario');
+            }
+
+            alert(`Usuario ${activate ? 'activado' : 'desactivado'} exitosamente`);
+            loadUsers();
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+
+    document.getElementById('newUserForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const data = {
+            identificacion: formData.get('identificacion'),
+            nombres: formData.get('nombres'),
+            apellidos: formData.get('apellidos'),
+            email: formData.get('email'),
+            rol: formData.get('rol'),
+            id_sede: parseInt(formData.get('id_sede'))
+        };
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Error al crear usuario');
+            }
+
+            const newUser = await response.json();
+
+            // Guardar credenciales
+            currentCredentials = {
+                username: newUser.username,
+                password: newUser.temp_password
+            };
+
+            // Mostrar modal
+            showCredentialsModal();
+
+            // Limpiar formulario y recargar lista
+            e.target.reset();
+            loadUsers();
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+
+    function showCredentialsModal() {
+        document.getElementById('credUsername').textContent = currentCredentials.username;
+        document.getElementById('credPassword').textContent = currentCredentials.password;
+        document.getElementById('credentialsModal').style.display = 'flex';
+    }
+
+    function hideCredentialsModal() {
+        document.getElementById('credentialsModal').style.display = 'none';
+        currentCredentials = {};
+    }
+
+    function copyToClipboard(elementId) {
+        const text = document.getElementById(elementId).textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Copiado al portapapeles');
+        });
+    }
+
+    function copyAllCredentials() {
+        const text = `Usuario: ${currentCredentials.username}\nContraseña: ${currentCredentials.password}`;
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Credenciales copiadas al portapapeles');
+        });
+    }
+
+    // Cargar datos al iniciar
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSedes();
+        loadUsers();
+    });
+</script>
+
+<style>
+    .filters-row select,
+    .filters-row input {
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .data-table th {
+        background-color: #f5f5f5;
+        font-weight: 600;
+    }
+
+    .data-table tbody tr:hover {
+        background-color: #f9f9f9;
+    }
+
+    .badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .badge-admisionista {
+        background-color: #e3f2fd;
+        color: #1976d2;
+    }
+
+    .badge-medico {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+    }
+
+    .badge-admin {
+        background-color: #fff3e0;
+        color: #e65100;
+    }
+
+    .badge-success {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+    }
+
+    .badge-danger {
+        background-color: #ffebee;
+        color: #c62828;
+    }
+
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}
